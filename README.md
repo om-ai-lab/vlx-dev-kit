@@ -2,7 +2,7 @@
   <h1 align="center">VLX Development Kit</h1>
 </p>
 
-<p align="center">Edge AI development resources for the VLX Development Module and VLX-Seek.</p>
+<p align="center">Edge AI development resources for the VLX Development Module.</p>
 
 <p align="center">English | <a href="README_ZH.md">中文</a></p>
 

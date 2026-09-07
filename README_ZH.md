@@ -2,7 +2,7 @@
   <h1 align="center">VLX 开发套件</h1>
 </p>
 
-<p align="center">VLX 开发模组与 VLX-Seek 的边缘 AI 开发资源。</p>
+<p align="center">VLX 开发模组的边缘 AI 开发资源。</p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
 
