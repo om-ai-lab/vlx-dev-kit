@@ -173,6 +173,52 @@ def get_camera_hub(device: str) -> CameraHub:
     return hub
 
 
+def camera_display_name(device: Path) -> str:
+    name_file = Path("/sys/class/video4linux") / device.name / "name"
+    try:
+        name = name_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        name = ""
+    return name or f"USB Camera {device.name.removeprefix('video')}"
+
+
+def camera_can_capture(device: Path) -> bool:
+    if cv2 is None or not os.access(device, os.R_OK | os.W_OK):
+        return False
+
+    hub = camera_hubs.get(str(device))
+    if hub is not None:
+        with hub.condition:
+            if hub.jpeg is not None:
+                return True
+            if hub.thread and hub.thread.is_alive():
+                return hub.error is None
+
+    capture = cv2.VideoCapture(str(device), cv2.CAP_V4L2)
+    try:
+        if not capture.isOpened():
+            return False
+        for _ in range(3):
+            ok, frame = capture.read()
+            if ok and frame is not None and getattr(frame, "size", 0) > 0:
+                return True
+        return False
+    finally:
+        capture.release()
+
+
+def discover_cameras() -> list[dict[str, Any]]:
+    result = []
+    for device in sorted(Path("/dev").glob("video*")):
+        if re.fullmatch(r"video\d+", device.name) and camera_can_capture(device):
+            result.append({
+                "device": str(device),
+                "name": camera_display_name(device),
+                "available": True,
+            })
+    return result
+
+
 @dataclass(frozen=True)
 class SeekDetection:
     text: str
@@ -365,11 +411,7 @@ async def health() -> dict[str, Any]:
 
 @app.get("/api/cameras")
 async def list_cameras() -> list[dict[str, Any]]:
-    result = []
-    for device in sorted(Path("/dev").glob("video*")):
-        if re.fullmatch(r"video\d+", device.name):
-            result.append({"device": str(device), "name": f"USB Camera {device.name.removeprefix('video')}", "available": os.access(device, os.R_OK | os.W_OK)})
-    return result
+    return await asyncio.to_thread(discover_cameras)
 
 
 @app.post("/api/sources/camera")
@@ -377,8 +419,10 @@ async def create_camera(payload: CameraCreate) -> dict[str, Any]:
     device = payload.device.strip()
     if not re.fullmatch(r"/dev/video\d+", device) or not Path(device).exists():
         raise HTTPException(404, "USB camera does not exist")
+    if not await asyncio.to_thread(camera_can_capture, Path(device)):
+        raise HTTPException(422, "USB camera cannot capture video")
     source_id = "camera-" + Path(device).name
-    sources[source_id] = {"id": source_id, "name": "USB Camera " + Path(device).name.removeprefix("video"), "kind": "camera", "status": "ready", "file_name": device, "playbackUrl": f"/api/cameras/{source_id}/stream", "createdAt": now_iso()}
+    sources[source_id] = {"id": source_id, "name": camera_display_name(Path(device)), "kind": "camera", "status": "ready", "file_name": device, "playbackUrl": f"/api/cameras/{source_id}/stream", "createdAt": now_iso()}
     get_camera_hub(device)
     return sources[source_id]
 

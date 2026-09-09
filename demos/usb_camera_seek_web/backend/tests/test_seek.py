@@ -4,6 +4,8 @@ import asyncio
 import base64
 import time
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from requests import ReadTimeout
@@ -69,6 +71,59 @@ class SeekAdapterTests(unittest.TestCase):
             image_url,
             "data:image/jpeg;base64," + base64.b64encode(b"jpeg-bytes").decode(),
         )
+
+    def test_camera_probe_requires_a_readable_frame(self) -> None:
+        class FakeCapture:
+            def __init__(self, frames: list[tuple[bool, object | None]]) -> None:
+                self.frames = iter(frames)
+                self.released = False
+
+            def isOpened(self) -> bool:
+                return True
+
+            def read(self) -> tuple[bool, object | None]:
+                return next(self.frames, (False, None))
+
+            def release(self) -> None:
+                self.released = True
+
+        bad_capture = FakeCapture([(False, None)] * 3)
+        good_capture = FakeCapture([(False, None), (True, SimpleNamespace(size=10))])
+        fake_cv2 = SimpleNamespace(CAP_V4L2=200, VideoCapture=lambda *_: bad_capture)
+
+        with patch.object(main, "cv2", fake_cv2), patch.object(main.os, "access", return_value=True):
+            self.assertFalse(main.camera_can_capture(Path("/dev/video15")))
+            fake_cv2.VideoCapture = lambda *_: good_capture
+            self.assertTrue(main.camera_can_capture(Path("/dev/video16")))
+
+        self.assertTrue(bad_capture.released)
+        self.assertTrue(good_capture.released)
+
+    def test_camera_probe_reuses_an_active_camera_hub(self) -> None:
+        device = "/dev/video16"
+        hub = main.CameraHub(device)
+        hub.jpeg = b"frame"
+        main.camera_hubs[device] = hub
+        fake_cv2 = SimpleNamespace(CAP_V4L2=200)
+
+        try:
+            with patch.object(main, "cv2", fake_cv2), patch.object(main.os, "access", return_value=True):
+                self.assertTrue(main.camera_can_capture(Path(device)))
+        finally:
+            main.camera_hubs.pop(device, None)
+
+    def test_discovery_returns_only_devices_that_can_capture(self) -> None:
+        devices = [Path("/dev/video14"), Path("/dev/video16"), Path("/dev/video-meta")]
+        with patch.object(main.Path, "glob", return_value=devices):
+            with patch.object(main, "camera_can_capture", side_effect=lambda item: item.name == "video16"):
+                with patch.object(main, "camera_display_name", return_value="GS02 1080P CAMERA"):
+                    result = main.discover_cameras()
+
+        self.assertEqual(result, [{
+            "device": "/dev/video16",
+            "name": "GS02 1080P CAMERA",
+            "available": True,
+        }])
 
     def test_response_parser_maps_bbox_and_discards_invalid_box(self) -> None:
         result = main.parse_seek_response({

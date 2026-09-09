@@ -2,6 +2,8 @@
 
 VLX-Seek 目标搜索模型的本地 Web 体验台。后端从 USB 相机采集单帧图像，通过 `omai` Python SDK 调用 VLX-Seek，前端实时显示检测文本与边界框。
 
+相机列表会实际打开 `/dev/video*` 并尝试读取图像，只显示能够正常采集视频帧的设备节点。点击刷新按钮可以重新检测当前可用相机。
+
 ![VLX-Seek Studio USB 摄像头目标检测界面](./image.png)
 
 ## 本地开发
