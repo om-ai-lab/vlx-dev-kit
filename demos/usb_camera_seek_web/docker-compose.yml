@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: ./backend
+    environment:
+      VLX_API_ENABLED: ${VLX_API_ENABLED:-true}
+      VLX_API_ENDPOINT: ${VLX_API_ENDPOINT:-http://172.16.37.118:8000/os/}
+      VLX_API_KEY: ${VLX_API_KEY:-YjI3YjM4OTQyZDczMjZkMWUzYTdAZVpHVWdxdzg=}
+      VLX_API_CONNECT_TIMEOUT_MS: ${VLX_API_CONNECT_TIMEOUT_MS:-60000}
+      VLX_API_READ_TIMEOUT_MS: ${VLX_API_READ_TIMEOUT_MS:-60000}
+      VLX_API_WRITE_TIMEOUT_MS: ${VLX_API_WRITE_TIMEOUT_MS:-60000}
+      SEEK_MODEL: ${SEEK_MODEL:-vlx-seek-1.5-3b}
+      SEEK_MOCK: ${SEEK_MOCK:-0}
+      SEEK_ANALYSIS_FPS: ${SEEK_ANALYSIS_FPS:-1}
+      SEEK_PREVIEW_DELAY_MS: ${SEEK_PREVIEW_DELAY_MS:-500}
+      CAMERA_FRAME_BUFFER_SECONDS: ${CAMERA_FRAME_BUFFER_SECONDS:-10}
+      CAMERA_FRAME_BUFFER_MAX_FRAMES: ${CAMERA_FRAME_BUFFER_MAX_FRAMES:-900}
+      SEEK_DATA_DIR: /var/lib/vlx-seek
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      - "${VIDEO_DEVICE:-/dev/video0}:${VIDEO_DEVICE:-/dev/video0}"
+    group_add:
+      - "${VIDEO_GID:-44}"
+    volumes:
+      - seek-data:/var/lib/vlx-seek
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - api
+
+volumes:
+  seek-data:
